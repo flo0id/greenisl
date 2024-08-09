@@ -94,7 +94,7 @@ const generateId = (title) => {
 
 // Endpoint to get a blog post by id
 app.get("/blog/:id", (req, res) => {
-  const filePath = path.join(__dirname, "blogs.json");
+  const filePath = path.join(__dirname, "/files/blogs.json");
   const { id } = req.params;
 
   const blogs = getBlogs(filePath);
@@ -109,14 +109,14 @@ app.get("/blog/:id", (req, res) => {
 
 // Endpoint to get the blog data
 app.get("/blog", (req, res) => {
-  const filePath = path.join(__dirname, "blogs.json");
+  const filePath = path.join(__dirname, "/files/blogs.json");
   const blogs = getBlogs(filePath);
   res.json(blogs);
 });
 
 // Endpoint to add a new blog post
 app.post("/blog", upload.single("file"), (req, res) => {
-  const filePath = path.join(__dirname, "blogs.json");
+  const filePath = path.join(__dirname, "/files/blogs.json");
   const { title, content } = req.body;
 
   if (!title || !content) {
@@ -153,7 +153,7 @@ app.post("/blog", upload.single("file"), (req, res) => {
 
 // Endpoint to delete a blog post by id
 app.delete("/blog/:id", (req, res) => {
-  const filePath = path.join(__dirname, "blogs.json");
+  const filePath = path.join(__dirname, "/files/blogs.json");
   const { id } = req.params;
 
   const blogs = getBlogs(filePath);
@@ -185,7 +185,7 @@ app.delete("/blog/:id", (req, res) => {
 // Endpoint to edit an existing blog post by id
 // Endpoint to edit an existing blog post by id
 app.put("/blog/:id", upload.single("file"), (req, res) => {
-  const filePath = path.join(__dirname, "blogs.json");
+  const filePath = path.join(__dirname, "/files/blogs.json");
   const { id } = req.params;
   const { title, content } = req.body;
 
