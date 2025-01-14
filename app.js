@@ -31,9 +31,18 @@ const s3 = new S3Client({
 });
 
 const BUCKET_NAME = process.env.S3_BUCKET_NAME;
-console.log("VERSION 1.2");
+console.log("VERSION 1.3");
 
-app.use(cors());
+// app.use(cors());
+
+app.use(
+  cors({
+    origin: "*", // Allow all origins (you can restrict this to specific origins)
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
+  })
+);
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
