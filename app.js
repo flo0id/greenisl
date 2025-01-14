@@ -45,7 +45,6 @@ const connection = mysql.createConnection({
   database: process.env.DB_NAME,
 });
 
-console.log("Connected to MySQL", process.env.DB_PASSWORD, process.env.DB_NAME);
 // Login endpoint
 app.post("/login", (req, res) => {
   const { username, password } = req.body;
