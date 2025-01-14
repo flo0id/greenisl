@@ -689,8 +689,22 @@ app.get("/minicrm/smallUser", authMiddleware, async (req, res) => {
     if (CategoryId) params.CategoryId = CategoryId;
     if (StatusId) params.StatusId = StatusId;
 
+    let paramsString = "";
+    if (Name) {
+      params.Name = Name;
+      paramsString = `Name=${Name}`;
+    }
+    if (CategoryId) {
+      params.CategoryId = CategoryId;
+      paramsString = `${paramsString}&CategoryId=${CategoryId}`;
+    }
+    if (StatusId) {
+      params.StatusId = StatusId;
+      paramsString = `${paramsString}&StatusId=${StatusId}`;
+    }
+
     const response = await axios.get(
-      `${process.env.MINICRM_API_URL_CARD}?Name=${Name}&CategoryId=${CategoryId}&StatusId=${StatusId}`,
+      `${process.env.MINICRM_API_URL_CARD}?${paramsString}`,
       {
         auth: {
           username: process.env.MINICRM_SYSTEM_ID,
