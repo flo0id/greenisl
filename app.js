@@ -40,7 +40,7 @@ app.use(
     origin: "https://greenislandinvest.hu", // Allow all origins (you can restrict this to specific origins)
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     preflightContinue: false,
-    credentials: true,
+    credentials: false,
     optionsSuccessStatus: 200,
   })
 );
