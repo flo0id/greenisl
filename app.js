@@ -34,16 +34,24 @@ const BUCKET_NAME = process.env.S3_BUCKET_NAME;
 console.log("VERSION 1.3");
 
 // app.use(cors());
+const allowedOrigins = [
+  "https://greenislandinvest.hu",
+  "https://www.greenislandinvest.hu",
+];
 
-app.use(
-  cors({
-    origin: "https://greenislandinvest.hu", // Allow all origins (you can restrict this to specific origins)
-    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-    preflightContinue: false,
-    credentials: false,
-    optionsSuccessStatus: 200,
-  })
-);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
+  res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  );
+  res.header("Access-Control-Allow-Credentials", "false");
+  next();
+});
 app.options("*", cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
