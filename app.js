@@ -302,7 +302,7 @@ app.post("/otthonfelujitaspassword", async (req, res) => {
 });
 
 app.post("/saveOtthonfelujitas", async (req, res) => {
-  const { hash, password } = req.query;
+  const { hash, password, nev } = req.query;
 
   if (!hash && !password) {
     return res.status(400).json({ error: "Please provide an id" });
@@ -312,6 +312,7 @@ app.post("/saveOtthonfelujitas", async (req, res) => {
     const params = {};
     if (hash) params.hash = hash;
     if (password) params.password = password;
+    if (nev) params.nev = nev;
 
     const connection = mysql.createConnection({
       host: process.env.DB_HOST,
@@ -322,12 +323,89 @@ app.post("/saveOtthonfelujitas", async (req, res) => {
     });
 
     const query = "SELECT * FROM users WHERE hash = ?";
+    const query2 = "INSERT INTO users (nev, hash, password) VALUES (?, ?, ?)";
     connection.query(query, [hash, password], async (err, results) => {
       if (err) {
         console.error("Error fetching user:", err);
         res.status(500).json({ error: "Internal Server Error", success: true });
       } else if (results.length === 0) {
         res.status(404).json({ error: "User not found", success: true });
+        connection.query(
+          query2,
+          [nev, hash, password],
+          async (err, results) => {
+            if (err) {
+              console.error("Error fetching user:", err);
+              res
+                .status(500)
+                .json({ error: "Internal Server Error", success: true });
+            } else {
+              try {
+                const user = results[0];
+                const params = {};
+                let paramsString = "";
+                if (nev) {
+                  params.Name = nev;
+                  paramsString = `Name=${nev}`;
+                }
+                params.CategoryId = 71;
+                paramsString = `${paramsString}&CategoryId=${71}`;
+                const response = await axios.get(
+                  `${process.env.MINICRM_API_URL_CARD}?${paramsString}`,
+                  {
+                    auth: {
+                      username: process.env.MINICRM_SYSTEM_ID,
+                      password: process.env.MINICRM_API_KEY,
+                    },
+                  }
+                );
+                if (response.data.Count === 0) {
+                  console.log("data.count === 0");
+                  return res
+                    .status(404)
+                    .json({ error: "User not found by name" });
+                }
+
+                if (response.data.Count === 1) {
+                  const body = req.body;
+
+                  if (!Object.values(response.data.Results)[0].Id) {
+                    return res
+                      .status(400)
+                      .json({ error: "Please provide an id" });
+                  }
+
+                  try {
+                    const response2 = await axios.put(
+                      `${process.env.MINICRM_API_URL_CARD}/${
+                        Object.values(response.data.Results)[0].Id
+                      }`,
+                      body,
+                      {
+                        auth: {
+                          username: process.env.MINICRM_SYSTEM_ID,
+                          password: process.env.MINICRM_API_KEY,
+                        },
+                      }
+                    );
+
+                    res.json({ ...response.data, ...{ success: true } });
+                  } catch (error) {
+                    console.error("Error uploading file to MiniCRM:", error);
+                    res.status(500).json({ error: "Internal Server Error" });
+                  }
+                } else {
+                  return res
+                    .status(404)
+                    .json({ error: "User not found by name" });
+                }
+              } catch (error) {
+                console.error("Error fetching user from MiniCRM:", error);
+                res.status(500).json({ error: "Internal Server Error" });
+              }
+            }
+          }
+        );
       } else {
         try {
           const user = results[0];
@@ -355,6 +433,7 @@ app.post("/saveOtthonfelujitas", async (req, res) => {
           );
 
           if (response.data.Count === 0) {
+            console.log("data.count === 0");
             return res.status(404).json({ error: "User not found by name" });
           }
 
@@ -362,6 +441,7 @@ app.post("/saveOtthonfelujitas", async (req, res) => {
             const body = req.body;
 
             if (!Object.values(response.data.Results)[0].Id) {
+              console.log("response.data.results[0].id missing");
               return res.status(400).json({ error: "Please provide an id" });
             }
 
@@ -771,6 +851,7 @@ app.get("/otthonfelujitas", authMiddleware, async (req, res) => {
 
     const query = "SELECT * FROM users WHERE nev = ?";
     connection.query(query, [nev], async (err, results) => {
+      console.log(results);
       if (err) {
         console.error("Error fetching user:", err);
         res.status(500).json({ error: "Internal Server Error" });
