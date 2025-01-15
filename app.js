@@ -40,7 +40,8 @@ app.use(
     origin: "*", // Allow all origins (you can restrict this to specific origins)
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     preflightContinue: false,
-    optionsSuccessStatus: 204,
+    credentials: true,
+    optionsSuccessStatus: 200,
   })
 );
 app.use(express.json({ limit: "50mb" }));
@@ -919,12 +920,10 @@ app.get("/otthonfelujitas", authMiddleware, async (req, res) => {
             );
 
             if (response3.data.Count === 0) {
-              return res
-                .status(404)
-                .json({
-                  ...results[0],
-                  ...{ error: "User not found response3" },
-                });
+              return res.status(404).json({
+                ...results[0],
+                ...{ error: "User not found response3" },
+              });
             }
 
             const adatok = Object.values(response3.data.Results)[0];
