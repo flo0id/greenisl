@@ -878,7 +878,9 @@ app.get("/otthonfelujitas", authMiddleware, async (req, res) => {
           );
 
           if (response.data.Count === 0) {
-            return res.status(404).json({ error: "User not found by name" });
+            return res
+              .status(404)
+              .json({ ...results[0], ...{ error: "User not found by name" } });
           }
 
           if (response.data.Count === 1) {
@@ -895,7 +897,9 @@ app.get("/otthonfelujitas", authMiddleware, async (req, res) => {
             );
 
             if (response2.data.Count === 0) {
-              return res.status(404).json({ error: "User not found by id" });
+              return res
+                .status(404)
+                .json({ ...results[0], ...{ error: "User not found by id" } });
             }
 
             const params = {};
@@ -917,7 +921,10 @@ app.get("/otthonfelujitas", authMiddleware, async (req, res) => {
             if (response3.data.Count === 0) {
               return res
                 .status(404)
-                .json({ error: "User not found response3" });
+                .json({
+                  ...results[0],
+                  ...{ error: "User not found response3" },
+                });
             }
 
             const adatok = Object.values(response3.data.Results)[0];
