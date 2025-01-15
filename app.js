@@ -328,16 +328,17 @@ app.post("/saveOtthonfelujitas", async (req, res) => {
     connection.query(query, [hash, password], async (err, results) => {
       if (err) {
         console.error("Error fetching user:", err);
-        res.status(500).json({ error: "Internal Server Error", success: true });
+        return res
+          .status(500)
+          .json({ error: "Internal Server Error", success: true });
       } else if (results.length === 0) {
-        res.status(404).json({ error: "User not found", success: true });
         connection.query(
           query2,
           [nev, hash, password],
           async (err, results) => {
             if (err) {
               console.error("Error fetching user:", err);
-              res
+              return res
                 .status(500)
                 .json({ error: "Internal Server Error", success: true });
             } else {
@@ -390,10 +391,12 @@ app.post("/saveOtthonfelujitas", async (req, res) => {
                       }
                     );
 
-                    res.json({ ...response.data, ...{ success: true } });
+                    return res.json({ ...response.data, ...{ success: true } });
                   } catch (error) {
                     console.error("Error uploading file to MiniCRM:", error);
-                    res.status(500).json({ error: "Internal Server Error" });
+                    return res
+                      .status(500)
+                      .json({ error: "Internal Server Error" });
                   }
                 } else {
                   return res
@@ -402,7 +405,7 @@ app.post("/saveOtthonfelujitas", async (req, res) => {
                 }
               } catch (error) {
                 console.error("Error fetching user from MiniCRM:", error);
-                res.status(500).json({ error: "Internal Server Error" });
+                return res.status(500).json({ error: "Internal Server Error" });
               }
             }
           }
@@ -855,9 +858,9 @@ app.get("/otthonfelujitas", authMiddleware, async (req, res) => {
       console.log(results);
       if (err) {
         console.error("Error fetching user:", err);
-        res.status(500).json({ error: "Internal Server Error" });
+        return res.status(500).json({ error: "Internal Server Error" });
       } else if (results.length === 0) {
-        res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found" });
       } else {
         try {
           const params = {};
@@ -929,7 +932,7 @@ app.get("/otthonfelujitas", authMiddleware, async (req, res) => {
             const adatok = Object.values(response3.data.Results)[0];
             delete adatok.Id;
             delete results[0].id;
-            res.json({ ...response2.data, ...adatok, ...results[0] });
+            return res.json({ ...response2.data, ...adatok, ...results[0] });
           } else {
             res.json(response.data);
           }
