@@ -37,13 +37,14 @@ console.log("VERSION 1.3");
 
 app.use(
   cors({
-    origin: "*", // Allow all origins (you can restrict this to specific origins)
+    origin: "https://greenislandinvest.hu", // Allow all origins (you can restrict this to specific origins)
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     preflightContinue: false,
     credentials: true,
     optionsSuccessStatus: 200,
   })
 );
+app.options("*", cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
@@ -369,7 +370,10 @@ app.post("/saveOtthonfelujitas", async (req, res) => {
                 }
 
                 if (response.data.Count === 1) {
-                  const body = req.body;
+                  const body = {
+                    hash: hash,
+                    password: password,
+                  };
 
                   if (!Object.values(response.data.Results)[0].Id) {
                     return res
