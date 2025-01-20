@@ -31,7 +31,7 @@ const s3 = new S3Client({
 });
 
 const BUCKET_NAME = process.env.S3_BUCKET_NAME;
-console.log("VERSION 1.3");
+console.log("VERSION 1.4");
 
 // app.use(cors());
 const allowedOrigins = [
@@ -701,7 +701,7 @@ app.get("/minicrm/user2", authMiddleware, async (req, res) => {
 });
 
 app.get("/minicrm/fullUser", authMiddleware, async (req, res) => {
-  const { Name, CategoryId, StatusId } = req.query;
+  const { Name, CategoryId, StatusId, Id } = req.query;
 
   if (!Name && !CategoryId && !StatusId) {
     return res.status(400).json({ error: "Please provide an id" });
@@ -710,6 +710,10 @@ app.get("/minicrm/fullUser", authMiddleware, async (req, res) => {
   try {
     const params = {};
     let paramsString = "";
+    if (Id) {
+      params.Id = Id;
+      paramsString = `Id=${Id}`;
+    }
     if (Name) {
       params.Name = Name;
       paramsString = `Name=${Name}`;
