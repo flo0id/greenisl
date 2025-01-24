@@ -19,7 +19,7 @@ const bcrypt = require("bcrypt");
 const axios = require("axios");
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 // Configure AWS SDK
 const s3 = new S3Client({
@@ -31,7 +31,7 @@ const s3 = new S3Client({
 });
 
 const BUCKET_NAME = process.env.S3_BUCKET_NAME;
-console.log("VERSION 1.5");
+console.log("VERSION 1.6");
 
 // app.use(cors());
 const allowedOrigins = [
