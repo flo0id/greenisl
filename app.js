@@ -31,7 +31,7 @@ const s3 = new S3Client({
 });
 
 const BUCKET_NAME = process.env.S3_BUCKET_NAME;
-console.log("VERSION 1.4");
+console.log("VERSION 1.5");
 
 // app.use(cors());
 const allowedOrigins = [
