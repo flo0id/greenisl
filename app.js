@@ -37,8 +37,8 @@ console.log("VERSION 1.6");
 const allowedOrigins = [
   "https://greenislandinvest.hu",
   "https://www.greenislandinvest.hu",
-  "localhost:3001",
-  "http://localhost:3001",
+  // "localhost:3001",
+  // "http://localhost:3001",
 ];
 
 app.use((req, res, next) => {
@@ -589,6 +589,8 @@ app.use(authMiddleware);
 app.post("/blog", upload.single("file"), async (req, res) => {
   const { title, content } = req.body;
 
+  console.log(title, content, req.file);
+
   if (!title || !content) {
     return res
       .status(400)
@@ -606,21 +608,35 @@ app.post("/blog", upload.single("file"), async (req, res) => {
 
   let fileUrl = null;
   if (req.file) {
+    const s3 = new S3Client({
+      region: process.env.AWS_REGION,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      },
+    });
+
     const params = {
-      Bucket: BUCKET_NAME,
+      Bucket: process.env.S3_BUCKET_NAME,
       Key: `files/${id}${path.extname(req.file.originalname)}`,
       Body: req.file.buffer,
       ContentType: req.file.mimetype,
     };
-    const upload = new Upload({
-      client: s3,
-      params,
-    });
-    const data = await upload.done();
-    fileUrl = data.Location;
+
+    try {
+      const command = new PutObjectCommand(params);
+      await s3.send(command);
+      fileUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${
+        process.env.AWS_REGION
+      }.amazonaws.com/files/${id}${path.extname(req.file.originalname)}`;
+    } catch (error) {
+      console.error("Error uploading file to S3:", error);
+      return res.status(500).json({ error: "Error uploading file to S3" });
+    }
   }
 
-  const newBlog = { id, title, content, file: fileUrl };
+  // Save the blog post with the file URL
+  const newBlog = { id, title, content, fileUrl };
   blogs.push(newBlog);
 
   try {
