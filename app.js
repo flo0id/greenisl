@@ -37,6 +37,8 @@ console.log("VERSION 1.4");
 const allowedOrigins = [
   "https://greenislandinvest.hu",
   "https://www.greenislandinvest.hu",
+  // "localhost:3001",
+  // "http://localhost:3001",
 ];
 
 app.use((req, res, next) => {
@@ -59,53 +61,61 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 // Login endpoint
 app.post("/login", (req, res) => {
   const { username, password } = req.body;
+  try {
+    const connection = mysql.createConnection({
+      host: process.env.DB_HOST,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+    });
 
-  // Create MySQL connection
-  const connection = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-  });
-
-  connection.query(
-    "SELECT * FROM users WHERE username = ?",
-    [username],
-    (err, results) => {
-      if (err) {
-        console.error("Error during login:", err);
-        return res.status(500).json({ error: "Internal Server Error" });
-      }
-
-      if (results.length === 0) {
-        return res.status(401).json({ error: "Invalid username or password" });
-      }
-
-      const user = results[0];
-
-      // Validate password
-      bcrypt.compare(password, user.password, (err, isMatch) => {
+    connection.query(
+      "SELECT * FROM users WHERE username = ?",
+      [username],
+      (err, results) => {
         if (err) {
-          console.error("Error during password validation:", err);
+          console.error("Error during login:", err);
           return res.status(500).json({ error: "Internal Server Error" });
         }
 
-        if (!isMatch) {
+        if (results.length === 0) {
           return res
             .status(401)
             .json({ error: "Invalid username or password" });
         }
 
-        // Generate JWT token with 1 day expiration
-        const token = jwt.sign(
-          { id: user.id, username: user.username },
-          process.env.JWT_SECRET,
-          { expiresIn: "1d" }
-        );
-        res.json({ token });
-      });
-    }
-  );
+        const user = results[0];
+
+        // Validate password
+        bcrypt.compare(password, user.password, (err, isMatch) => {
+          if (err) {
+            console.error("Error during password validation:", err);
+            return res.status(500).json({ error: "Internal Server Error" });
+          }
+
+          if (!isMatch) {
+            return res
+              .status(401)
+              .json({ error: "Invalid username or password" });
+          }
+
+          // Generate JWT token with 1 day expiration
+          const token = jwt.sign(
+            { id: user.id, username: user.username },
+            process.env.JWT_SECRET,
+            { expiresIn: "1d" }
+          );
+          res.json({ token });
+        });
+      }
+    );
+  } catch (error) {
+    console.error("Failed to fetch user", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  } finally {
+    connection.end();
+  }
+  // Create MySQL connection
 });
 
 const upload = multer({
@@ -303,11 +313,12 @@ app.post("/otthonfelujitaspassword", async (req, res) => {
             .json({ error: "Internal Server Error", success: false });
         }
       }
-      connection.end();
     });
   } catch (error) {
     console.error("Failed to fetch user", error);
     res.status(500).json({ error: "Internal Server Error", success: true });
+  } finally {
+    connection.end();
   }
 });
 
@@ -488,11 +499,87 @@ app.post("/saveOtthonfelujitas", async (req, res) => {
           res.status(500).json({ error: "Internal Server Error" });
         }
       }
-      connection.end();
     });
   } catch (error) {
     console.error("Failed to save user", error);
     res.status(500).json({ error: "Internal Server Error", success: false });
+  } finally {
+    connection.end();
+  }
+});
+
+app.put("/minicrm/addUser", async (req, res) => {
+  const { recaptchaToken, ...body } = req.body;
+  //sample body:
+  //   {
+  //     "Name": "Új lead tesztelés",
+  //     "Email": "uj@statusz.com",
+  //     "Phone": "+9876543210",
+  //     "Type": "Business"
+  //  }
+  // Verify reCAPTCHA token
+  try {
+    const recaptchaResponse = await axios.post(
+      `https://www.google.com/recaptcha/api/siteverify`,
+      null,
+      {
+        params: {
+          secret: process.env.RECAPTCHA_SECRET_KEY,
+          response: recaptchaToken,
+        },
+      }
+    );
+
+    if (!recaptchaResponse.data.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid reCAPTCHA token", ok: false });
+    }
+  } catch (error) {
+    console.error("Error verifying reCAPTCHA:", error);
+    return res.status(500).json({ error: "Internal Server Error", ok: false });
+  }
+  try {
+    const response = await axios.put(
+      `${process.env.MINICRM_API_URL_CONTACT}`,
+      body,
+      {
+        auth: {
+          username: process.env.MINICRM_SYSTEM_ID,
+          password: process.env.MINICRM_API_KEY,
+        },
+      }
+    );
+
+    const body2 = {
+      Name: body.Name,
+      CategoryId: 55,
+      StatusId: "Új lead weboldal",
+      UserId: "Zólyomi Norbert",
+      Email: body.Email,
+      ContactId: response.data.Id,
+    };
+
+    try {
+      const response = await axios.put(
+        `${process.env.MINICRM_API_URL_CARD}`,
+        body2,
+        {
+          auth: {
+            username: process.env.MINICRM_SYSTEM_ID,
+            password: process.env.MINICRM_API_KEY,
+          },
+        }
+      );
+
+      res.json({ ...response.data, ok: true });
+    } catch (error) {
+      console.error("Error uploading file to MiniCRM:", error);
+      res.status(500).json({ error: "Internal Server Error", ok: false });
+    }
+  } catch (error) {
+    console.error("Error uploading file to MiniCRM:", error);
+    res.status(500).json({ error: "Internal Server Error", ok: false });
   }
 });
 
@@ -957,11 +1044,12 @@ app.get("/otthonfelujitas", authMiddleware, async (req, res) => {
           res.status(500).json({ error: "Internal Server Error" });
         }
       }
-      connection.end();
     });
   } catch (error) {
     console.error("Failed to fetch user", error);
     res.status(500).json({ error: "Internal Server Error" });
+  } finally {
+    connection.end();
   }
 });
 
@@ -1008,50 +1096,6 @@ app.put("/minicrm/uploadFile", authMiddleware, async (req, res) => {
   try {
     const response = await axios.put(
       `${process.env.MINICRM_API_URL_CARD}/${id}`,
-      body,
-      {
-        auth: {
-          username: process.env.MINICRM_SYSTEM_ID,
-          password: process.env.MINICRM_API_KEY,
-        },
-      }
-    );
-
-    res.json(response.data);
-  } catch (error) {
-    console.error("Error uploading file to MiniCRM:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-app.put("/minicrm/addUser", authMiddleware, async (req, res) => {
-  const body = req.body;
-
-  try {
-    const response = await axios.put(
-      `${process.env.MINICRM_API_URL_CONTACT}`,
-      body,
-      {
-        auth: {
-          username: process.env.MINICRM_SYSTEM_ID,
-          password: process.env.MINICRM_API_KEY,
-        },
-      }
-    );
-
-    res.json(response.data);
-  } catch (error) {
-    console.error("Error uploading file to MiniCRM:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-app.put("/minicrm/addUser2", authMiddleware, async (req, res) => {
-  const body = req.body;
-
-  try {
-    const response = await axios.put(
-      `${process.env.MINICRM_API_URL_CARD}`,
       body,
       {
         auth: {
