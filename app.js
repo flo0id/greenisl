@@ -37,8 +37,8 @@ console.log("VERSION 1.6");
 const allowedOrigins = [
   "https://greenislandinvest.hu",
   "https://www.greenislandinvest.hu",
-  // "localhost:3001",
-  // "http://localhost:3001",
+  "localhost:3001",
+  "http://localhost:3001",
 ];
 
 app.use((req, res, next) => {
@@ -61,14 +61,14 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 // Login endpoint
 app.post("/login", (req, res) => {
   const { username, password } = req.body;
-  try {
-    const connection = mysql.createConnection({
-      host: process.env.DB_HOST,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
-    });
+  const connection = mysql.createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+  });
 
+  try {
     connection.query(
       "SELECT * FROM users WHERE username = ?",
       [username],
@@ -203,15 +203,15 @@ app.post("/otthonfelujitaspassword", async (req, res) => {
     return res.status(400).json({ error: "Please provide a password" });
   }
 
-  try {
-    const connection = mysql.createConnection({
-      host: process.env.DB_HOST,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME_OTTHONFELUJITAS,
-      port: process.env.DB_PORT,
-    });
+  const connection = mysql.createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME_OTTHONFELUJITAS,
+    port: process.env.DB_PORT,
+  });
 
+  try {
     const query = "SELECT * FROM users WHERE hash = ?";
     connection.query(query, [hash], async (err, results) => {
       if (err) {
@@ -329,19 +329,19 @@ app.post("/saveOtthonfelujitas", async (req, res) => {
     return res.status(400).json({ error: "Please provide an id" });
   }
 
+  const connection = mysql.createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME_OTTHONFELUJITAS,
+    port: process.env.DB_PORT,
+  });
+
   try {
     const params = {};
     if (hash) params.hash = hash;
     if (password) params.password = password;
     if (nev) params.nev = nev;
-
-    const connection = mysql.createConnection({
-      host: process.env.DB_HOST,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME_OTTHONFELUJITAS,
-      port: process.env.DB_PORT,
-    });
 
     const query = "SELECT * FROM users WHERE hash = ?";
     const query2 = "INSERT INTO users (nev, hash, password) VALUES (?, ?, ?)";
@@ -947,15 +947,15 @@ app.get("/otthonfelujitas", authMiddleware, async (req, res) => {
     return res.status(400).json({ error: "Please provide a name" });
   }
 
-  try {
-    const connection = mysql.createConnection({
-      host: process.env.DB_HOST,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME_OTTHONFELUJITAS,
-      port: process.env.DB_PORT,
-    });
+  const connection = mysql.createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME_OTTHONFELUJITAS,
+    port: process.env.DB_PORT,
+  });
 
+  try {
     const query = "SELECT * FROM users WHERE nev = ?";
     connection.query(query, [nev], async (err, results) => {
       console.log(results);
