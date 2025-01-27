@@ -806,7 +806,7 @@ app.get("/minicrm/user2", authMiddleware, async (req, res) => {
 app.get("/minicrm/fullUser", authMiddleware, async (req, res) => {
   const { Name, CategoryId, StatusId, Id } = req.query;
 
-  if (!Name && !CategoryId && !StatusId) {
+  if (!Name && !CategoryId && !StatusId && !Id) {
     return res.status(400).json({ error: "Please provide an id" });
   }
 
@@ -861,7 +861,9 @@ app.get("/minicrm/fullUser", authMiddleware, async (req, res) => {
       }
 
       const params = {};
-      params.MainContactId = Object.values(response.data.Results)[0].ContactId;
+      params.MainContactId = Object.values(response.data.Results)[0].BusinessId
+        ? Object.values(response.data.Results)[0].BusinessId
+        : Object.values(response.data.Results)[0].ContactId;
 
       const response3 = await axios.get(process.env.MINICRM_API_URL_CONTACT, {
         auth: {
