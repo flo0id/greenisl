@@ -31,7 +31,7 @@ const s3 = new S3Client({
 });
 
 const BUCKET_NAME = process.env.S3_BUCKET_NAME;
-console.log("VERSION 1.6");
+console.log("VERSION 1.8");
 
 // app.use(cors());
 const allowedOrigins = [
@@ -1126,6 +1126,68 @@ app.put("/minicrm/uploadFile", authMiddleware, async (req, res) => {
     res.json(response.data);
   } catch (error) {
     console.error("Error uploading file to MiniCRM:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// Endpoint to get and increment order numbers
+app.get("/order-number/:type", authMiddleware, (req, res) => {
+  const { type } = req.params;
+
+  // Validate type parameter
+  if (type !== "contract" && type !== "order") {
+    return res
+      .status(400)
+      .json({ error: "Type must be either 'contract' or 'order'" });
+  }
+
+  const connection = mysql.createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME_OTTHONFELUJITAS,
+    port: process.env.DB_PORT,
+  });
+
+  try {
+    // First get the current number
+    connection.query(
+      "SELECT current_number FROM order_numbers WHERE type = ?",
+      [type],
+      (err, results) => {
+        if (err) {
+          console.error(`Error fetching ${type} number:`, err);
+          connection.end();
+          return res.status(500).json({ error: "Internal Server Error" });
+        }
+
+        if (results.length === 0) {
+          connection.end();
+          return res.status(404).json({ error: `No ${type} number found` });
+        }
+
+        const currentNumber = results[0].current_number;
+
+        // Then increment the number
+        connection.query(
+          "UPDATE order_numbers SET current_number = current_number + 1 WHERE type = ?",
+          [type],
+          (err) => {
+            if (err) {
+              console.error(`Error incrementing ${type} number:`, err);
+              connection.end();
+              return res.status(500).json({ error: "Internal Server Error" });
+            }
+
+            connection.end();
+            res.json({ type, number: currentNumber });
+          }
+        );
+      }
+    );
+  } catch (error) {
+    console.error(`Error processing ${type} number request:`, error);
+    connection.end();
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
