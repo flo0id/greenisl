@@ -28,6 +28,8 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  enableKeepAlive: true, // Enable TCP keepalive
+  keepAliveInitialDelay: 10000, // Initial delay before sending keepalive probes
   ssl:
     process.env.NODE_ENV === "production"
       ? { rejectUnauthorized: true }
@@ -44,6 +46,8 @@ const otthonfelujitasPool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  enableKeepAlive: true, // Enable TCP keepalive
+  keepAliveInitialDelay: 10000, // Initial delay before sending keepalive probes
   ssl:
     process.env.NODE_ENV === "production"
       ? { rejectUnauthorized: true }
