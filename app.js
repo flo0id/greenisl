@@ -14,9 +14,58 @@ const {
 const { Upload } = require("@aws-sdk/lib-storage");
 const jwt = require("jsonwebtoken");
 const authMiddleware = require("./authMiddleware"); // Import the middleware
-const mysql = require("mysql2");
+const mysql = require("mysql2/promise");
 const bcrypt = require("bcrypt");
 const axios = require("axios");
+
+// Create a database connection pool
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  port: process.env.DB_PORT || 3306,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  connectTimeout: 60000, // 60 seconds timeout
+  acquireTimeout: 60000,
+  timeout: 60000,
+  ssl:
+    process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: true }
+      : undefined,
+});
+
+// Create a separate pool for otthonfelujitas database
+const otthonfelujitasPool = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME_OTTHONFELUJITAS,
+  port: process.env.DB_PORT || 3306,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  connectTimeout: 60000, // 60 seconds timeout
+  acquireTimeout: 60000,
+  timeout: 60000,
+  ssl:
+    process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: true }
+      : undefined,
+});
+
+// Helper function to handle database errors
+const handleDatabaseError = (err, res) => {
+  console.error("Database error:", err);
+  if (err.code === "ETIMEDOUT" || err.code === "ECONNREFUSED") {
+    return res
+      .status(503)
+      .json({ error: "Database connection failed. Please try again later." });
+  }
+  return res.status(500).json({ error: "Internal Server Error" });
+};
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -63,80 +112,41 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Login endpoint
-app.post("/login", (req, res) => {
+app.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  const connection = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    port: process.env.DB_PORT || 3306,
-    connectTimeout: 30000, // Increased timeout for production environment
-    ssl:
-      process.env.NODE_ENV === "production"
-        ? { rejectUnauthorized: true }
-        : undefined,
-  });
-
-  // Set up connection event handlers before making the query
-  connection.on("error", (err) => {
-    console.error("Database connection error:", err);
-    return res
-      .status(500)
-      .json({ error: "Database connection error. Please try again later." });
-  });
 
   try {
-    connection.query(
+    // Get a connection from the pool
+    const [results] = await pool.execute(
       "SELECT * FROM users WHERE username = ?",
-      [username],
-      (err, results) => {
-        if (err) {
-          console.error("Error during login:", err);
-          return res.status(500).json({ error: "Internal Server Error" });
-        }
-
-        if (results.length === 0) {
-          connection.end();
-          return res
-            .status(401)
-            .json({ error: "Invalid username or password" });
-        }
-
-        const user = results[0];
-
-        // Validate password
-        bcrypt.compare(password, user.password, (err, isMatch) => {
-          if (err) {
-            console.error("Error during password validation:", err);
-            connection.end();
-            return res.status(500).json({ error: "Internal Server Error" });
-          }
-
-          if (!isMatch) {
-            connection.end();
-            return res
-              .status(401)
-              .json({ error: "Invalid username or password" });
-          }
-
-          // Generate JWT token with 1 day expiration
-          const token = jwt.sign(
-            { id: user.id, username: user.username },
-            process.env.JWT_SECRET,
-            { expiresIn: "1d" }
-          );
-          connection.end();
-          res.json({ token });
-        });
-      }
+      [username]
     );
+
+    if (results.length === 0) {
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+
+    const user = results[0];
+
+    // Validate password
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+
+    // Generate JWT token with 1 day expiration
+    const token = jwt.sign(
+      { id: user.id, username: user.username },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    res.json({ token });
   } catch (error) {
-    console.error("Failed to fetch user", error);
-    connection.end();
-    res.status(500).json({ error: "Internal Server Error" });
+    console.error("Error during login:", error);
+    handleDatabaseError(error, res);
   }
-  // Create MySQL connection
 });
 
 const upload = multer({
@@ -355,187 +365,153 @@ app.post("/saveOtthonfelujitas", async (req, res) => {
     return res.status(400).json({ error: "Please provide an id" });
   }
 
-  const connection = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME_OTTHONFELUJITAS,
-    port: process.env.DB_PORT || 3306,
-    connectTimeout: 30000, // Increased timeout for production environment
-    ssl:
-      process.env.NODE_ENV === "production"
-        ? { rejectUnauthorized: true }
-        : undefined,
-  });
-
   try {
     const params = {};
     if (hash) params.hash = hash;
     if (password) params.password = password;
     if (nev) params.nev = nev;
 
-    const query = "SELECT * FROM users WHERE hash = ?";
-    const query2 = "INSERT INTO users (nev, hash, password) VALUES (?, ?, ?)";
-    connection.query(query, [hash, password], async (err, results) => {
-      if (err) {
-        console.error("Error fetching user:", err);
-        return res
-          .status(500)
-          .json({ error: "Internal Server Error", success: true });
-      } else if (results.length === 0) {
-        connection.query(
-          query2,
-          [nev, hash, password],
-          async (err, results) => {
-            if (err) {
-              console.error("Error fetching user:", err);
-              return res
-                .status(500)
-                .json({ error: "Internal Server Error", success: true });
-            } else {
-              try {
-                const user = results[0];
-                const params = {};
-                let paramsString = "";
-                if (nev) {
-                  params.Name = nev;
-                  paramsString = `Name=${nev}`;
-                }
-                params.CategoryId = 71;
-                paramsString = `${paramsString}&CategoryId=${71}`;
-                const response = await axios.get(
-                  `${process.env.MINICRM_API_URL_CARD}?${paramsString}`,
-                  {
-                    auth: {
-                      username: process.env.MINICRM_SYSTEM_ID,
-                      password: process.env.MINICRM_API_KEY,
-                    },
-                  }
-                );
-                if (response.data.Count === 0) {
-                  console.log("data.count === 0");
-                  return res
-                    .status(404)
-                    .json({ error: "User not found by name" });
-                }
+    // First check if user exists
+    const [results] = await otthonfelujitasPool.execute(
+      "SELECT * FROM users WHERE hash = ?",
+      [hash]
+    );
 
-                if (response.data.Count === 1) {
-                  const body = {
-                    hash: hash,
-                    password: password,
-                  };
+    if (results.length === 0) {
+      // User doesn't exist, create new user
+      await otthonfelujitasPool.execute(
+        "INSERT INTO users (nev, hash, password) VALUES (?, ?, ?)",
+        [nev, hash, password]
+      );
 
-                  if (!Object.values(response.data.Results)[0].Id) {
-                    return res
-                      .status(400)
-                      .json({ error: "Please provide an id" });
-                  }
-
-                  try {
-                    const response2 = await axios.put(
-                      `${process.env.MINICRM_API_URL_CARD}/${
-                        Object.values(response.data.Results)[0].Id
-                      }`,
-                      body,
-                      {
-                        auth: {
-                          username: process.env.MINICRM_SYSTEM_ID,
-                          password: process.env.MINICRM_API_KEY,
-                        },
-                      }
-                    );
-
-                    return res.json({ ...response.data, ...{ success: true } });
-                  } catch (error) {
-                    console.error("Error uploading file to MiniCRM:", error);
-                    return res
-                      .status(500)
-                      .json({ error: "Internal Server Error" });
-                  }
-                } else {
-                  return res
-                    .status(404)
-                    .json({ error: "User not found by name" });
-                }
-              } catch (error) {
-                console.error("Error fetching user from MiniCRM:", error);
-                return res.status(500).json({ error: "Internal Server Error" });
-              }
-            }
+      try {
+        const params = {};
+        let paramsString = "";
+        if (nev) {
+          params.Name = nev;
+          paramsString = `Name=${nev}`;
+        }
+        params.CategoryId = 71;
+        paramsString = `${paramsString}&CategoryId=${71}`;
+        const response = await axios.get(
+          `${process.env.MINICRM_API_URL_CARD}?${paramsString}`,
+          {
+            auth: {
+              username: process.env.MINICRM_SYSTEM_ID,
+              password: process.env.MINICRM_API_KEY,
+            },
           }
         );
-      } else {
-        try {
-          const user = results[0];
-          if (user.password !== password && user.hash !== hash) {
-            return res
-              .status(401)
-              .json({ error: "Invalid password", success: true });
-          }
-          const params = {};
-          let paramsString = "";
-          if (user.nev) {
-            params.Name = user.nev;
-            paramsString = `Name=${user.nev}`;
-          }
-          params.CategoryId = 71;
-          paramsString = `${paramsString}&CategoryId=${71}`;
-          const response = await axios.get(
-            `${process.env.MINICRM_API_URL_CARD}?${paramsString}`,
-            {
-              auth: {
-                username: process.env.MINICRM_SYSTEM_ID,
-                password: process.env.MINICRM_API_KEY,
-              },
-            }
-          );
-
-          if (response.data.Count === 0) {
-            console.log("data.count === 0");
-            return res.status(404).json({ error: "User not found by name" });
-          }
-
-          if (response.data.Count === 1) {
-            const body = req.body;
-
-            if (!Object.values(response.data.Results)[0].Id) {
-              console.log("response.data.results[0].id missing");
-              return res.status(400).json({ error: "Please provide an id" });
-            }
-
-            try {
-              const response2 = await axios.put(
-                `${process.env.MINICRM_API_URL_CARD}/${
-                  Object.values(response.data.Results)[0].Id
-                }`,
-                body,
-                {
-                  auth: {
-                    username: process.env.MINICRM_SYSTEM_ID,
-                    password: process.env.MINICRM_API_KEY,
-                  },
-                }
-              );
-
-              res.json({ ...response.data, ...{ success: true } });
-            } catch (error) {
-              console.error("Error uploading file to MiniCRM:", error);
-              res.status(500).json({ error: "Internal Server Error" });
-            }
-          } else {
-            return res.status(404).json({ error: "User not found by name" });
-          }
-        } catch (error) {
-          console.error("Error fetching user from MiniCRM:", error);
-          res.status(500).json({ error: "Internal Server Error" });
+        if (response.data.Count === 0) {
+          console.log("data.count === 0");
+          return res.status(404).json({ error: "User not found by name" });
         }
+
+        if (response.data.Count === 1) {
+          const body = {
+            hash: hash,
+            password: password,
+          };
+
+          if (!Object.values(response.data.Results)[0].Id) {
+            return res.status(400).json({ error: "Please provide an id" });
+          }
+
+          try {
+            const response2 = await axios.put(
+              `${process.env.MINICRM_API_URL_CARD}/${
+                Object.values(response.data.Results)[0].Id
+              }`,
+              body,
+              {
+                auth: {
+                  username: process.env.MINICRM_SYSTEM_ID,
+                  password: process.env.MINICRM_API_KEY,
+                },
+              }
+            );
+
+            return res.json({ ...response.data, ...{ success: true } });
+          } catch (error) {
+            console.error("Error uploading file to MiniCRM:", error);
+            return res.status(500).json({ error: "Internal Server Error" });
+          }
+        } else {
+          return res.status(404).json({ error: "User not found by name" });
+        }
+      } catch (error) {
+        console.error("Error fetching user from MiniCRM:", error);
+        return res.status(500).json({ error: "Internal Server Error" });
       }
-    });
+    } else {
+      try {
+        const user = results[0];
+        if (user.password !== password && user.hash !== hash) {
+          return res
+            .status(401)
+            .json({ error: "Invalid password", success: true });
+        }
+        const params = {};
+        let paramsString = "";
+        if (user.nev) {
+          params.Name = user.nev;
+          paramsString = `Name=${user.nev}`;
+        }
+        params.CategoryId = 71;
+        paramsString = `${paramsString}&CategoryId=${71}`;
+        const response = await axios.get(
+          `${process.env.MINICRM_API_URL_CARD}?${paramsString}`,
+          {
+            auth: {
+              username: process.env.MINICRM_SYSTEM_ID,
+              password: process.env.MINICRM_API_KEY,
+            },
+          }
+        );
+
+        if (response.data.Count === 0) {
+          console.log("data.count === 0");
+          return res.status(404).json({ error: "User not found by name" });
+        }
+
+        if (response.data.Count === 1) {
+          const body = req.body;
+
+          if (!Object.values(response.data.Results)[0].Id) {
+            console.log("response.data.results[0].id missing");
+            return res.status(400).json({ error: "Please provide an id" });
+          }
+
+          try {
+            const response2 = await axios.put(
+              `${process.env.MINICRM_API_URL_CARD}/${
+                Object.values(response.data.Results)[0].Id
+              }`,
+              body,
+              {
+                auth: {
+                  username: process.env.MINICRM_SYSTEM_ID,
+                  password: process.env.MINICRM_API_KEY,
+                },
+              }
+            );
+
+            res.json({ ...response.data, ...{ success: true } });
+          } catch (error) {
+            console.error("Error uploading file to MiniCRM:", error);
+            res.status(500).json({ error: "Internal Server Error" });
+          }
+        } else {
+          return res.status(404).json({ error: "User not found by name" });
+        }
+      } catch (error) {
+        console.error("Error fetching user from MiniCRM:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    }
   } catch (error) {
     console.error("Failed to save user", error);
     res.status(500).json({ error: "Internal Server Error", success: false });
-  } finally {
-    connection.end();
   }
 });
 
@@ -996,114 +972,95 @@ app.get("/otthonfelujitas", authMiddleware, async (req, res) => {
     return res.status(400).json({ error: "Please provide a name" });
   }
 
-  const connection = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME_OTTHONFELUJITAS,
-    port: process.env.DB_PORT || 3306,
-    connectTimeout: 30000, // Increased timeout for production environment
-    ssl:
-      process.env.NODE_ENV === "production"
-        ? { rejectUnauthorized: true }
-        : undefined,
-  });
-
   try {
-    const query = "SELECT * FROM users WHERE nev = ?";
-    connection.query(query, [nev], async (err, results) => {
-      console.log(results);
-      if (err) {
-        console.error("Error fetching user:", err);
-        return res.status(500).json({ error: "Internal Server Error" });
-      } else if (results.length === 0) {
-        return res.status(404).json({ error: "User not found" });
-      } else {
-        try {
-          const params = {};
-          let paramsString = "";
-          if (nev) {
-            params.Name = nev;
-            paramsString = `Name=${nev}`;
-          }
-          params.CategoryId = 71;
-          paramsString = `${paramsString}&CategoryId=${71}`;
-          const response = await axios.get(
-            `${process.env.MINICRM_API_URL_CARD}?${paramsString}`,
-            {
-              auth: {
-                username: process.env.MINICRM_SYSTEM_ID,
-                password: process.env.MINICRM_API_KEY,
-              },
-            }
-          );
+    const [results] = await otthonfelujitasPool.execute(
+      "SELECT * FROM users WHERE nev = ?",
+      [nev]
+    );
+    console.log(results);
 
-          if (response.data.Count === 0) {
-            return res
-              .status(404)
-              .json({ ...results[0], ...{ error: "User not found by name" } });
-          }
+    if (results.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
 
-          if (response.data.Count === 1) {
-            const response2 = await axios.get(
-              `${process.env.MINICRM_API_URL_CARD}/${
-                Object.values(response.data.Results)[0].Id
-              }`,
-              {
-                auth: {
-                  username: process.env.MINICRM_SYSTEM_ID,
-                  password: process.env.MINICRM_API_KEY,
-                },
-              }
-            );
-
-            if (response2.data.Count === 0) {
-              return res
-                .status(404)
-                .json({ ...results[0], ...{ error: "User not found by id" } });
-            }
-
-            const params = {};
-            params.MainContactId = Object.values(
-              response.data.Results
-            )[0].ContactId;
-
-            const response3 = await axios.get(
-              process.env.MINICRM_API_URL_CONTACT,
-              {
-                auth: {
-                  username: process.env.MINICRM_SYSTEM_ID,
-                  password: process.env.MINICRM_API_KEY,
-                },
-                params,
-              }
-            );
-
-            if (response3.data.Count === 0) {
-              return res.status(404).json({
-                ...results[0],
-                ...{ error: "User not found response3" },
-              });
-            }
-
-            const adatok = Object.values(response3.data.Results)[0];
-            delete adatok.Id;
-            delete results[0].id;
-            return res.json({ ...response2.data, ...adatok, ...results[0] });
-          } else {
-            res.json(response.data);
-          }
-        } catch (error) {
-          console.error("Error fetching user from MiniCRM:", error);
-          res.status(500).json({ error: "Internal Server Error" });
-        }
+    try {
+      const params = {};
+      let paramsString = "";
+      if (nev) {
+        params.Name = nev;
+        paramsString = `Name=${nev}`;
       }
-    });
+      params.CategoryId = 71;
+      paramsString = `${paramsString}&CategoryId=${71}`;
+      const response = await axios.get(
+        `${process.env.MINICRM_API_URL_CARD}?${paramsString}`,
+        {
+          auth: {
+            username: process.env.MINICRM_SYSTEM_ID,
+            password: process.env.MINICRM_API_KEY,
+          },
+        }
+      );
+
+      if (response.data.Count === 0) {
+        return res
+          .status(404)
+          .json({ ...results[0], ...{ error: "User not found by name" } });
+      }
+
+      if (response.data.Count === 1) {
+        const response2 = await axios.get(
+          `${process.env.MINICRM_API_URL_CARD}/${
+            Object.values(response.data.Results)[0].Id
+          }`,
+          {
+            auth: {
+              username: process.env.MINICRM_SYSTEM_ID,
+              password: process.env.MINICRM_API_KEY,
+            },
+          }
+        );
+
+        if (response2.data.Count === 0) {
+          return res
+            .status(404)
+            .json({ ...results[0], ...{ error: "User not found by id" } });
+        }
+
+        const params = {};
+        params.MainContactId = Object.values(
+          response.data.Results
+        )[0].ContactId;
+
+        const response3 = await axios.get(process.env.MINICRM_API_URL_CONTACT, {
+          auth: {
+            username: process.env.MINICRM_SYSTEM_ID,
+            password: process.env.MINICRM_API_KEY,
+          },
+          params,
+        });
+
+        if (response3.data.Count === 0) {
+          return res.status(404).json({
+            ...results[0],
+            ...{ error: "User not found response3" },
+          });
+        }
+
+        const adatok = Object.values(response3.data.Results)[0];
+        delete adatok.Id;
+        delete results[0].id;
+        return res.json({ ...response2.data, ...adatok, ...results[0] });
+      } else {
+        res.json(response.data);
+      }
+    } catch (error) {
+      console.error("Error fetching user from MiniCRM:", error);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
   } catch (error) {
     console.error("Failed to fetch user", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  } finally {
-    connection.end();
+    handleDatabaseError(error, res);
   }
 });
 
