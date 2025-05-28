@@ -32,7 +32,7 @@ const pool = mysql.createPool({
   keepAliveInitialDelay: 10000, // Initial delay before sending keepalive probes
   ssl:
     process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: true }
+      ? { rejectUnauthorized: false } // Changed to false to accept self-signed certificates
       : undefined,
 });
 
@@ -50,7 +50,7 @@ const otthonfelujitasPool = mysql.createPool({
   keepAliveInitialDelay: 10000, // Initial delay before sending keepalive probes
   ssl:
     process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: true }
+      ? { rejectUnauthorized: false } // Changed to false to accept self-signed certificates
       : undefined,
 });
 
