@@ -37,19 +37,25 @@ const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
       "https://greenislandinvest.hu",
-      "https://www.greenislandinvest.hu"
+      "https://www.greenislandinvest.hu",
     ];
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error("Not allowed by CORS"));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Origin",
+    "X-Requested-With",
+    "Content-Type",
+    "Accept",
+    "Authorization",
+  ],
   credentials: false,
   preflightContinue: false,
-  optionsSuccessStatus: 204
+  optionsSuccessStatus: 204,
 };
 
 app.use(cors(corsOptions));
@@ -64,15 +70,20 @@ app.post("/login", (req, res) => {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    connectTimeout: 10000,
-    // Removed invalid options: acquireTimeout and timeout
-    // Added proper error handling with connection timeout
+    port: process.env.DB_PORT || 3306,
+    connectTimeout: 30000, // Increased timeout for production environment
+    ssl:
+      process.env.NODE_ENV === "production"
+        ? { rejectUnauthorized: true }
+        : undefined,
   });
 
   // Set up connection event handlers before making the query
-  connection.on('error', (err) => {
-    console.error('Database connection error:', err);
-    return res.status(500).json({ error: "Database connection error. Please try again later." });
+  connection.on("error", (err) => {
+    console.error("Database connection error:", err);
+    return res
+      .status(500)
+      .json({ error: "Database connection error. Please try again later." });
   });
 
   try {
@@ -218,7 +229,12 @@ app.post("/otthonfelujitaspassword", async (req, res) => {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME_OTTHONFELUJITAS,
-    port: process.env.DB_PORT,
+    port: process.env.DB_PORT || 3306,
+    connectTimeout: 30000, // Increased timeout for production environment
+    ssl:
+      process.env.NODE_ENV === "production"
+        ? { rejectUnauthorized: true }
+        : undefined,
   });
 
   try {
@@ -344,7 +360,12 @@ app.post("/saveOtthonfelujitas", async (req, res) => {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME_OTTHONFELUJITAS,
-    port: process.env.DB_PORT,
+    port: process.env.DB_PORT || 3306,
+    connectTimeout: 30000, // Increased timeout for production environment
+    ssl:
+      process.env.NODE_ENV === "production"
+        ? { rejectUnauthorized: true }
+        : undefined,
   });
 
   try {
@@ -980,7 +1001,12 @@ app.get("/otthonfelujitas", authMiddleware, async (req, res) => {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME_OTTHONFELUJITAS,
-    port: process.env.DB_PORT,
+    port: process.env.DB_PORT || 3306,
+    connectTimeout: 30000, // Increased timeout for production environment
+    ssl:
+      process.env.NODE_ENV === "production"
+        ? { rejectUnauthorized: true }
+        : undefined,
   });
 
   try {
@@ -1156,7 +1182,12 @@ app.get("/order-number/:type", authMiddleware, (req, res) => {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME_OTTHONFELUJITAS,
-    port: process.env.DB_PORT,
+    port: process.env.DB_PORT || 3306,
+    connectTimeout: 30000, // Increased timeout for production environment
+    ssl:
+      process.env.NODE_ENV === "production"
+        ? { rejectUnauthorized: true }
+        : undefined,
   });
 
   try {
