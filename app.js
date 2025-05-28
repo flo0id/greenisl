@@ -65,9 +65,14 @@ app.post("/login", (req, res) => {
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     connectTimeout: 10000,
-    acquireTimeout: 10000,
-    timeout: 10000,
-    connectionLimit: 10,
+    // Removed invalid options: acquireTimeout and timeout
+    // Added proper error handling with connection timeout
+  });
+
+  // Set up connection event handlers before making the query
+  connection.on('error', (err) => {
+    console.error('Database connection error:', err);
+    return res.status(500).json({ error: "Database connection error. Please try again later." });
   });
 
   try {
@@ -81,6 +86,7 @@ app.post("/login", (req, res) => {
         }
 
         if (results.length === 0) {
+          connection.end();
           return res
             .status(401)
             .json({ error: "Invalid username or password" });
@@ -92,10 +98,12 @@ app.post("/login", (req, res) => {
         bcrypt.compare(password, user.password, (err, isMatch) => {
           if (err) {
             console.error("Error during password validation:", err);
+            connection.end();
             return res.status(500).json({ error: "Internal Server Error" });
           }
 
           if (!isMatch) {
+            connection.end();
             return res
               .status(401)
               .json({ error: "Invalid username or password" });
@@ -107,15 +115,15 @@ app.post("/login", (req, res) => {
             process.env.JWT_SECRET,
             { expiresIn: "1d" }
           );
+          connection.end();
           res.json({ token });
         });
       }
     );
   } catch (error) {
     console.error("Failed to fetch user", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  } finally {
     connection.end();
+    res.status(500).json({ error: "Internal Server Error" });
   }
   // Create MySQL connection
 });
