@@ -33,28 +33,26 @@ const s3 = new S3Client({
 const BUCKET_NAME = process.env.S3_BUCKET_NAME;
 console.log("VERSION 1.8");
 
-// app.use(cors());
-const allowedOrigins = [
-  "https://greenislandinvest.hu",
-  "https://www.greenislandinvest.hu",
-  // "localhost:3001",
-  // "http://localhost:3001",
-];
+const corsOptions = {
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      "https://greenislandinvest.hu",
+      "https://www.greenislandinvest.hu"
+    ];
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
+  credentials: false,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
 
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.header("Access-Control-Allow-Origin", origin);
-  }
-  res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-  );
-  res.header("Access-Control-Allow-Credentials", "false");
-  next();
-});
-app.options("*", cors());
+app.use(cors(corsOptions));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
