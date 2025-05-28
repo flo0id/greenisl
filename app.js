@@ -28,9 +28,6 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  connectTimeout: 10000, // 60 seconds timeout
-  acquireTimeout: 10000,
-  timeout: 10000,
   ssl:
     process.env.NODE_ENV === "production"
       ? { rejectUnauthorized: true }
@@ -47,9 +44,6 @@ const otthonfelujitasPool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  connectTimeout: 60000, // 60 seconds timeout
-  acquireTimeout: 60000,
-  timeout: 60000,
   ssl:
     process.env.NODE_ENV === "production"
       ? { rejectUnauthorized: true }
@@ -87,7 +81,9 @@ const corsOptions = {
     const allowedOrigins = [
       "https://greenislandinvest.hu",
       "https://www.greenislandinvest.hu",
+      "https://greenisland-api.onrender.com",
     ];
+    console.log("Origin:", origin);
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
