@@ -238,101 +238,96 @@ app.post("/otthonfelujitaspassword", async (req, res) => {
     // Use the existing otthonfelujitasPool instead of creating a new connection
     const query = "SELECT * FROM users WHERE hash = ?";
     const [results] = await otthonfelujitasPool.execute(query, [hash]);
-    
+
     if (results.length === 0) {
       return res.status(404).json({ error: "User not found", success: false });
     }
-    
+
     try {
       const user = results[0];
-        if (user.password !== password) {
+      if (user.password !== password) {
+        return res
+          .status(401)
+          .json({ error: "Invalid password", success: false });
+      }
+      const params = {};
+      let paramsString = "";
+      if (user.nev) {
+        params.Name = user.nev;
+        paramsString = `Name=${user.nev}`;
+      }
+      params.CategoryId = 71;
+      paramsString = `${paramsString}&CategoryId=${71}`;
+      const response = await axios.get(
+        `${process.env.MINICRM_API_URL_CARD}?${paramsString}`,
+        {
+          auth: {
+            username: process.env.MINICRM_SYSTEM_ID,
+            password: process.env.MINICRM_API_KEY,
+          },
+        }
+      );
+
+      if (response.data.Count === 0) {
+        return res
+          .status(404)
+          .json({ error: "User not found by name", success: false });
+      }
+
+      if (response.data.Count === 1) {
+        const response2 = await axios.get(
+          `${process.env.MINICRM_API_URL_CARD}/${
+            Object.values(response.data.Results)[0].Id
+          }`,
+          {
+            auth: {
+              username: process.env.MINICRM_SYSTEM_ID,
+              password: process.env.MINICRM_API_KEY,
+            },
+          }
+        );
+
+        if (response2.data.Count === 0) {
           return res
-            .status(401)
-            .json({ error: "Invalid password", success: false });
+            .status(404)
+            .json({ error: "User not found by id", success: false });
         }
-          const params = {};
-          let paramsString = "";
-          if (user.nev) {
-            params.Name = user.nev;
-            paramsString = `Name=${user.nev}`;
-          }
-          params.CategoryId = 71;
-          paramsString = `${paramsString}&CategoryId=${71}`;
-          const response = await axios.get(
-            `${process.env.MINICRM_API_URL_CARD}?${paramsString}`,
-            {
-              auth: {
-                username: process.env.MINICRM_SYSTEM_ID,
-                password: process.env.MINICRM_API_KEY,
-              },
-            }
-          );
 
-          if (response.data.Count === 0) {
-            return res
-              .status(404)
-              .json({ error: "User not found by name", success: false });
-          }
+        const params = {};
+        params.MainContactId = Object.values(
+          response.data.Results
+        )[0].ContactId;
 
-          if (response.data.Count === 1) {
-            const response2 = await axios.get(
-              `${process.env.MINICRM_API_URL_CARD}/${
-                Object.values(response.data.Results)[0].Id
-              }`,
-              {
-                auth: {
-                  username: process.env.MINICRM_SYSTEM_ID,
-                  password: process.env.MINICRM_API_KEY,
-                },
-              }
-            );
+        const response3 = await axios.get(process.env.MINICRM_API_URL_CONTACT, {
+          auth: {
+            username: process.env.MINICRM_SYSTEM_ID,
+            password: process.env.MINICRM_API_KEY,
+          },
+          params,
+        });
 
-            if (response2.data.Count === 0) {
-              return res
-                .status(404)
-                .json({ error: "User not found by id", success: false });
-            }
-
-            const params = {};
-            params.MainContactId = Object.values(
-              response.data.Results
-            )[0].ContactId;
-
-            const response3 = await axios.get(
-              process.env.MINICRM_API_URL_CONTACT,
-              {
-                auth: {
-                  username: process.env.MINICRM_SYSTEM_ID,
-                  password: process.env.MINICRM_API_KEY,
-                },
-                params,
-              }
-            );
-
-            if (response3.data.Count === 0) {
-              return res
-                .status(404)
-                .json({ error: "User not found response3", success: false });
-            }
-
-            const adatok = Object.values(response3.data.Results)[0];
-            delete adatok.Id;
-            delete results[0].id;
-            res.json({
-              ...response2.data,
-              ...adatok,
-              ...results[0],
-              ...{ success: true },
-            });
-          } else {
-            res.json({ ...response.data, ...{ success: true } });
-          }
-        } catch (error) {
-          console.error("Error fetching user from MiniCRM:", error);
-          res
-            .status(500)
-            .json({ error: "Internal Server Error", success: false });
+        if (response3.data.Count === 0) {
+          return res
+            .status(404)
+            .json({ error: "User not found response3", success: false });
         }
+
+        const adatok = Object.values(response3.data.Results)[0];
+        delete adatok.Id;
+        delete results[0].id;
+        res.json({
+          ...response2.data,
+          ...adatok,
+          ...results[0],
+          ...{ success: true },
+        });
+      } else {
+        res.json({ ...response.data, ...{ success: true } });
+      }
+    } catch (error) {
+      console.error("Error fetching user from MiniCRM:", error);
+      res.status(500).json({ error: "Internal Server Error", success: false });
+    }
   } catch (error) {
     console.error("Database error:", error);
     res.status(500).json({ error: "Internal Server Error", success: false });
@@ -1105,7 +1100,7 @@ app.put("/minicrm/uploadFile", authMiddleware, async (req, res) => {
 });
 
 // Endpoint to get and increment order numbers
-app.get("/order-number/:type", authMiddleware, (req, res) => {
+app.get("/order-number/:type", authMiddleware, async (req, res) => {
   const { type } = req.params;
 
   // Validate type parameter
