@@ -32,7 +32,7 @@ const pool = mysql.createPool({
   keepAliveInitialDelay: 10000, // Initial delay before sending keepalive probes
   ssl:
     process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: false } // Changed to false to accept self-signed certificates
+      ? { rejectUnauthorized: false } // Set to false to accept self-signed certificates
       : undefined,
 });
 
@@ -50,7 +50,7 @@ const otthonfelujitasPool = mysql.createPool({
   keepAliveInitialDelay: 10000, // Initial delay before sending keepalive probes
   ssl:
     process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: false } // Changed to false to accept self-signed certificates
+      ? { rejectUnauthorized: false } // Set to false to accept self-signed certificates
       : undefined,
 });
 
@@ -234,37 +234,22 @@ app.post("/otthonfelujitaspassword", async (req, res) => {
     return res.status(400).json({ error: "Please provide a password" });
   }
 
-  const connection = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME_OTTHONFELUJITAS,
-    port: process.env.DB_PORT || 3306,
-    connectTimeout: 30000, // Increased timeout for production environment
-    ssl:
-      process.env.NODE_ENV === "production"
-        ? { rejectUnauthorized: true }
-        : undefined,
-  });
-
   try {
+    // Use the existing otthonfelujitasPool instead of creating a new connection
     const query = "SELECT * FROM users WHERE hash = ?";
-    connection.query(query, [hash], async (err, results) => {
-      if (err) {
-        console.error("Error fetching user:", err);
-        res
-          .status(500)
-          .json({ error: "Internal Server Error", success: false });
-      } else if (results.length === 0) {
-        res.status(404).json({ error: "User not found", success: false });
-      } else {
-        try {
-          const user = results[0];
-          if (user.password !== password) {
-            return res
-              .status(401)
-              .json({ error: "Invalid password", success: false });
-          }
+    const [results] = await otthonfelujitasPool.execute(query, [hash]);
+    
+    if (results.length === 0) {
+      return res.status(404).json({ error: "User not found", success: false });
+    }
+    
+    try {
+      const user = results[0];
+        if (user.password !== password) {
+          return res
+            .status(401)
+            .json({ error: "Invalid password", success: false });
+        }
           const params = {};
           let paramsString = "";
           if (user.nev) {
@@ -348,13 +333,9 @@ app.post("/otthonfelujitaspassword", async (req, res) => {
             .status(500)
             .json({ error: "Internal Server Error", success: false });
         }
-      }
-    });
   } catch (error) {
-    console.error("Failed to fetch user", error);
-    res.status(500).json({ error: "Internal Server Error", success: true });
-  } finally {
-    connection.end();
+    console.error("Database error:", error);
+    res.status(500).json({ error: "Internal Server Error", success: false });
   }
 });
 
@@ -1134,58 +1115,29 @@ app.get("/order-number/:type", authMiddleware, (req, res) => {
       .json({ error: "Type must be either 'contract' or 'order'" });
   }
 
-  const connection = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME_OTTHONFELUJITAS,
-    port: process.env.DB_PORT || 3306,
-    connectTimeout: 30000, // Increased timeout for production environment
-    ssl:
-      process.env.NODE_ENV === "production"
-        ? { rejectUnauthorized: true }
-        : undefined,
-  });
-
   try {
+    // Use the existing otthonfelujitasPool instead of creating a new connection
     // First get the current number
-    connection.query(
+    const [results] = await otthonfelujitasPool.execute(
       "SELECT current_number FROM order_numbers WHERE type = ?",
-      [type],
-      (err, results) => {
-        if (err) {
-          console.error(`Error fetching ${type} number:`, err);
-          connection.end();
-          return res.status(500).json({ error: "Internal Server Error" });
-        }
-
-        if (results.length === 0) {
-          connection.end();
-          return res.status(404).json({ error: `No ${type} number found` });
-        }
-
-        const currentNumber = results[0].current_number;
-
-        // Then increment the number
-        connection.query(
-          "UPDATE order_numbers SET current_number = current_number + 1 WHERE type = ?",
-          [type],
-          (err) => {
-            if (err) {
-              console.error(`Error incrementing ${type} number:`, err);
-              connection.end();
-              return res.status(500).json({ error: "Internal Server Error" });
-            }
-
-            connection.end();
-            res.json({ type, number: currentNumber });
-          }
-        );
-      }
+      [type]
     );
+
+    if (results.length === 0) {
+      return res.status(404).json({ error: `No ${type} number found` });
+    }
+
+    const currentNumber = results[0].current_number;
+
+    // Then increment the number
+    await otthonfelujitasPool.execute(
+      "UPDATE order_numbers SET current_number = current_number + 1 WHERE type = ?",
+      [type]
+    );
+
+    res.json({ type, number: currentNumber });
   } catch (error) {
     console.error(`Error processing ${type} number request:`, error);
-    connection.end();
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
